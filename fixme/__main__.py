@@ -57,6 +57,44 @@ class RawTextArgumentDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatte
     pass
 
 
+class Handler:
+    def __init__(self, next_handler=None):
+        self._next_handler = next_handler
+
+    def handle(self, param):
+        res = self._handle(param)
+        if res is None and self._next_handler is not None:
+            res = self._next_handler.handle(param)
+        return res
+
+    def _handle(self, param):
+        raise NotImplementedError
+
+
+class ArgHandler(Handler):
+    def __init__(self, args, next_handler=None):
+        super().__init__(next_handler)
+        self.args = args
+
+    def _handle(self, param):
+        return getattr(self.args, param, None)
+
+
+class EnvHandler(Handler):
+    def _handle(self, param):
+        return os.environ.get(param)
+
+
+class ConfigHandler(Handler):
+    def __init__(self, config_path, next_handler=None):
+        super().__init__(next_handler)
+        with open(config_path, 'r') as config_file:
+            self.config = yaml.safe_load(config_file)
+
+    def _handle(self, param):
+        return self.config.get(param)
+
+
 class Command(ABC):
     @abstractmethod
     def execute(self):
@@ -115,6 +153,10 @@ class App:
         else:
             _init_logger(logging.ERROR)
         logging.debug(f'command-line args: {args}')
+
+        handler = ArgHandler(args, EnvHandler(ConfigHandler(args.config)))
+        myarg = handler.handle('myarg')
+
         command = self.command_map.get(args.command)
         if command:
             command.execute()
