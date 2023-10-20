@@ -1,12 +1,31 @@
 from abc import ABC, abstractmethod
 import argparse
 import logging
+import os
+import re
 import sys
 import textwrap
 
 
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
+
+
+#region Command line parsing  # noqa
+
+
+def duration_in_seconds(time_str: str):
+    '''
+    Parse a time string with format <minutes>m<seconds>s and return the total number of seconds
+    '''
+    pattern = r'^(\d+m)?(\d+s)?$'
+    match = re.match(pattern, time_str)
+    if not match:
+        raise ValueError(f'Invalid time string "{time_str}"')
+    minutes_str, seconds_str = match.groups()
+    minutes = int(minutes_str[:-1]) if minutes_str else 0
+    seconds = int(seconds_str[:-1]) if seconds_str else 0
+    return minutes * 60 + seconds
 
 
 class ColorLogFormatter(logging.Formatter):
@@ -58,17 +77,30 @@ class RawTextArgumentDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatte
 
 
 class Handler:
+    '''
+    An interface for the [Chain of Responsibility](https://refactoring.guru/design-patterns/chain-of-responsibility/python/example) design pattern.
+    '''
+
     def __init__(self, next_handler=None):
         self._next_handler = next_handler
 
-    def handle(self, param):
-        res = self._handle(param)
-        if res is None and self._next_handler is not None:
-            res = self._next_handler.handle(param)
-        return res
-
-    def _handle(self, param):
+    @abstractmethod
+    def handle_request(self, key):
         raise NotImplementedError
+
+    def get_from_next_handler(self, key):
+        if self._next_handler:
+            return self._next_handler.handle_request(key)
+        return None
+
+
+class DefaultHandler(Handler):
+    def __init__(self, default_value, next_handler=None):
+        super().__init__(next_handler)
+        self.default_value = default_value
+
+    def handle_request(self, key):
+        return self.default_value
 
 
 class ArgHandler(Handler):
@@ -76,39 +108,87 @@ class ArgHandler(Handler):
         super().__init__(next_handler)
         self.args = args
 
-    def _handle(self, param):
-        return getattr(self.args, param, None)
+    def handle_request(self, key):
+        if key in self.args:
+            return getattr(self.args, key, None)
+        return self.get_from_next_handler(key)
 
 
 class EnvHandler(Handler):
-    def _handle(self, param):
-        return os.environ.get(param)
-
-
-class ConfigHandler(Handler):
-    def __init__(self, config_path, next_handler=None):
+    def __init__(self, next_handler=None):
         super().__init__(next_handler)
-        with open(config_path, 'r') as config_file:
-            self.config = yaml.safe_load(config_file)
 
-    def _handle(self, param):
-        return self.config.get(param)
-
-
-class Command(ABC):
-    @abstractmethod
-    def execute(self):
-        pass
+    def handle_request(self, key):
+        if key in os.environ:
+            return os.environ.get(key)
+        return self.get_from_next_handler(key)
 
 
-class StatusCommand(Command):
-    def execute(self):
-        logging.info('running StatusCommand')
+class DictHandler(Handler):
+    def __init__(self, data_dict={}, config_path=None, next_handler=None):
+        super().__init__(next_handler)
+        self.config_path = config_path
+        self.data_dict = data_dict
+        if self.config_path:
+            with open(config_path, 'r') as config_file:
+                yaml_data = yaml.safe_load(config_file)
+                self.data_dict = {**self.data_dict, **yaml_data}
+
+    def handle_request(self, key):
+        if key in self.data_dict:
+            return self.data_dict[key]
+        return self.get_from_next_handler(key)
 
 
-class StartCommand(Command):
-    def execute(self):
-        logging.info('running StartCommand')
+class FileHandler(Handler):
+    def __init__(self, file_path: str, mount_hook=None, next_handler=None):
+        super().__init__(next_handler)
+        self.file_path = file_path
+        self.mount_hook = mount_hook
+
+    def handle_request(self, key):
+        if self.mount_hook:
+            # Attempt to mount file system if file does not exist.
+            if not os.path.exists(self.file_path):
+                self.mount_hook()
+        if os.path.exists(self.file_path):
+            with open(self.file_path) as file:
+                return file.read()
+        return self.get_from_next_handler(key)
+
+
+class JSONFileHandler(FileHandler):
+    def __init__(self, file_path: str, mount_hook=None, next_handler=None):
+        super().__init__(file_path, mount_hook, next_handler)
+
+    def handle_request(self, key):
+        file_data = super().handle_request(key)
+        if file_data:
+            json_data = json.loads(file_data)
+            if key in json_data:
+                return json_data[key]
+        return self.get_from_next_handler(key)
+
+
+def fixme1(args):
+    default_config = {
+        'FIXME_NAME': 'fixme'
+    }
+    name_handler = ArgHandler(args, EnvHandler(DictHandler(default_config)))
+    name = name_handler.handle_request('FIXME_NAME')
+    logging.debug(f'FIXME_NAME={name}')
+
+
+def fixme2(args):
+    name_handler = ArgHandler(args, EnvHandler(DefaultHandler('fixme')))
+    name = name_handler.handle_request('FIXME_NAME')
+    logging.debug(f'FIXME_NAME={name}')
+    print(f'Duration is {args.duration} seconds')
+
+
+class SecondsDurationAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, duration_in_seconds(values))
 
 
 class App:
@@ -119,50 +199,37 @@ class App:
                 '''),
             formatter_class=RawTextArgumentDefaultsHelpFormatter)
 
-        self.parser.add_argument('-v', '--verbose',
-                                 choices=['error', 'warn', 'info', 'debug'],
-                                 default='error',
-                                 help='Set the verbosity level.')
+        self.parser.add_argument('-v', '--verbosity',
+                                 choices=['critical', 'error', 'warning', 'info', 'debug'],
+                                 default='info',
+                                 help='Set the logging verbosity level.')
+        self.parser.add_argument('-c', '--config',
+                                 help='A configuration file.')
+
         self.subparsers = self.parser.add_subparsers(dest='command')
-        start_parser = self.subparsers.add_parser(
-            'fixme1',
-            help='FIXME',
-            formatter_class=RawTextArgumentDefaultsHelpFormatter)
-        start_parser.add_argument('--dry-run',
-                                  action='store_true',
-                                  help='See what would happen without doing anything')
-        status_parser = self.subparsers.add_parser(
-            'fixme2',
-            help='FIXME',
-            formatter_class=RawTextArgumentDefaultsHelpFormatter)
-        self.command_map = {
-            'status': StatusCommand(),
-            'start': StartCommand(),
-        }
-        start_parser.set_defaults(strategy='start')
-        status_parser.set_defaults(strategy='status')
+        fixme1_parser = self.subparsers.add_parser('fixme1',
+                                                    help='FIXME 1',
+                                                    formatter_class=RawTextArgumentDefaultsHelpFormatter)
+        fixme1_parser.add_argument('--dry-run',
+                                   action='store_true',
+                                   help='See what would happen without doing anything')
+        fixme1_parser.set_defaults(func=fixme1)
+        fixme2_parser = self.subparsers.add_parser('fixme2',
+                                                    help='FIXME 2',
+                                                    formatter_class=RawTextArgumentDefaultsHelpFormatter)
+        fixme2_parser.add_argument('--duration',
+                                   action=SecondsDurationAction,
+                                   help='The duration to do something, for example 1m30s.')
+        fixme2_parser.set_defaults(func=fixme2)
 
     def run(self):
         args = self.parser.parse_args()
-        if args.verbose == 'debug' or args.dry_run:
-            _init_logger(logging.DEBUG)
-        elif args.verbose == 'info':
-            _init_logger(logging.INFO)
-        elif args.verbose == 'warn':
-            _init_logger(logging.WARNING)
-        else:
-            _init_logger(logging.ERROR)
+        _init_logger(getattr(logging, args.verbosity.upper()))
         logging.debug(f'command-line args: {args}')
+        args.func(args)
 
-        handler = ArgHandler(args, EnvHandler(ConfigHandler(args.config)))
-        myarg = handler.handle('myarg')
 
-        command = self.command_map.get(args.command)
-        if command:
-            command.execute()
-        else:
-            eprint(f"Invalid command '{command}'")
-            sys.exit(1)
+#endregion Command line parsing  # noqa
 
 
 if __name__ == "__main__":

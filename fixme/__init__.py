@@ -4,14 +4,14 @@ import subprocess
 from typing import List, Tuple
 
 
-def exec_commandline(cmd: List[str]) -> Tuple[int, str]:
+def cmd(cmd: List[str]) -> Tuple[int, str]:
     '''
     Executes a command line.
 
     Example:
     ```python
     cmd_args = ['ls', '-lah']
-    exit_code, response = exec_commandline(cmd_args)
+    exit_code, response = cmd(cmd_args)
     ```
     '''
     cmdline = ' '.join(cmd)
