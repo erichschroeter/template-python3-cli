@@ -195,6 +195,7 @@ class SecondsDurationAction(argparse.Action):
 
 class App:
     def __init__(self) -> None:
+        self.args = None
         self.parser = argparse.ArgumentParser(
             description=textwrap.dedent('''\
                 FIXME
@@ -224,11 +225,15 @@ class App:
                                    help='The duration to do something, for example 1m30s.')
         fixme2_parser.set_defaults(func=fixme2)
 
+    def parse_args(self, args=None):
+        self.args = self.parser.parse_args(args)
+
     def run(self):
-        args = self.parser.parse_args()
-        _init_logger(getattr(logging, args.verbosity.upper()))
-        logging.debug(f'command-line args: {args}')
-        args.func(args)
+        if not self.args:
+            self.parse_args()
+        _init_logger(getattr(logging, self.args.verbosity.upper()))
+        logging.debug(f'command-line args: {self.args}')
+        self.args.func(self.args)
 
 
 #endregion Command line parsing  # noqa
