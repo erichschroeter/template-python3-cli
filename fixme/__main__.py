@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 import argparse
 import json
 import logging
@@ -81,7 +81,7 @@ class RawTextArgumentDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatte
 class Handler:
     '''
     An interface for the [Chain of Responsibility](https://refactoring.guru/design-patterns/chain-of-responsibility/python/example) design pattern.
-    '''
+    '''  # noqa
 
     def __init__(self, next_handler=None):
         self._next_handler = next_handler
@@ -210,15 +210,15 @@ class App:
 
         self.subparsers = self.parser.add_subparsers(dest='command')
         fixme1_parser = self.subparsers.add_parser('fixme1',
-                                                    help='FIXME 1',
-                                                    formatter_class=RawTextArgumentDefaultsHelpFormatter)
+                                                   help='FIXME 1',
+                                                   formatter_class=RawTextArgumentDefaultsHelpFormatter)
         fixme1_parser.add_argument('--dry-run',
                                    action='store_true',
                                    help='See what would happen without doing anything')
         fixme1_parser.set_defaults(func=fixme1)
         fixme2_parser = self.subparsers.add_parser('fixme2',
-                                                    help='FIXME 2',
-                                                    formatter_class=RawTextArgumentDefaultsHelpFormatter)
+                                                   help='FIXME 2',
+                                                   formatter_class=RawTextArgumentDefaultsHelpFormatter)
         fixme2_parser.add_argument('--duration',
                                    action=SecondsDurationAction,
                                    help='The duration to do something, for example 1m30s.')

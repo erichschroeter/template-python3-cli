@@ -40,7 +40,7 @@ def request(method: str, url: str, data=None, headers=None, context=None):
     ```
 
     Keyword arguments
-        method -- one of [GET, PUT, POST]
+        method -- one of [GET, PUT, POST, DELETE]
         url -- the URL to transmit to
     '''
     logging.debug(f'{method.upper()} {url}')
