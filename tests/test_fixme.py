@@ -1,8 +1,12 @@
 
 import tempfile
+import textwrap
 import unittest
 
-from fixme.__main__ import App
+from contextlib import redirect_stdout
+from dataclasses import dataclass
+from fixme.__main__ import App, print_table
+from io import StringIO
 
 
 class Fixme1TestCase(unittest.TestCase):
@@ -33,3 +37,34 @@ class Fixme2TestCase(unittest.TestCase):
     def test_fixme_with_temporary_directory(self):
         with tempfile.TemporaryDirectory() as t_dir:
             pass
+
+
+@dataclass
+class User:
+    first_name: str
+    last_name: str
+    age: int
+    
+    @classmethod
+    def columns(cls):
+        return [a for a in dir(User('', '', 0)) if not a.startswith('__') and not a == 'columns']
+
+
+class TableTestCase(unittest.TestCase):
+    def setUp(self):
+        self.data = [
+            User('John', 'Smith', 19),
+            User('Jane', 'Doe', 18),
+        ]
+
+    def test_all_columns(self):
+        actual = StringIO()
+        with redirect_stdout(actual):
+            print_table(self.data, User.columns())
+            expected = textwrap.dedent('''\
+                                       age first_name last_name 
+                                       --- ---------- --------- 
+                                       19  John       Smith     
+                                       18  Jane       Doe       \n''')
+            actual = textwrap.dedent(actual.getvalue())
+            self.assertEqual(expected.splitlines(), actual.splitlines())

@@ -13,6 +13,58 @@ def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
+def get_max_widths(data, headers):
+    '''Returns a list of maximum widths for each column.'''
+    widths = []
+    for header in headers:
+        max_width = max(len(str(getattr(obj, header)).splitlines()[0]) for obj in data)  # Max width based on data
+        widths.append(max(max_width, len(header)))  # Comparing with header width too
+    return widths
+
+
+def print_table(data, headers):
+    '''
+    Prints a table of the `data` with the specified `headers`.
+    
+    ```python
+    from dataclasses import dataclass
+
+    @dataclass
+    class User:
+        first_name: str
+        last_name: str
+        age: int
+
+    data = {
+        User('John', 'Smith', 19),
+        User('Jane', 'Doe', 18),
+    }
+    print_table(data, ['first name', 'last name', 'age'])
+    ```
+
+    Keyword arguments
+        data -- a map of header and its data value
+        headers -- a list of header titles
+    '''
+    widths = get_max_widths(data, headers)
+
+    # Print header
+    for header, width in zip(headers, widths):
+        print(f"{header:<{width}}", end=" ")
+    print()  # Newline after headers
+
+    # Print separator
+    for width in widths:
+        print(f"{'-'*width}", end=" ")
+    print()  # Newline after separator
+
+    # Print data rows
+    for obj in data:
+        for key, width in zip(headers, widths):
+            print(f"{str(getattr(obj, key)).splitlines()[0]:<{width}}", end=" ")
+        print()  # Newline after each row
+
+
 #region Command line parsing  # noqa
 
 
