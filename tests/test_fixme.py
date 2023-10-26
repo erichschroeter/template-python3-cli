@@ -35,7 +35,7 @@ class Fixme2TestCase(unittest.TestCase):
         self.assertEqual(self.app.args.duration, 69)
 
     def test_fixme_with_temporary_directory(self):
-        with tempfile.TemporaryDirectory() as t_dir:
+        with tempfile.TemporaryDirectory() as t_dir:  # noqa
             pass
 
 
@@ -44,7 +44,7 @@ class User:
     first_name: str
     last_name: str
     age: int
-    
+
     @classmethod
     def columns(cls):
         return [a for a in dir(User('', '', 0)) if not a.startswith('__') and not a == 'columns']
@@ -65,6 +65,6 @@ class TableTestCase(unittest.TestCase):
                                        age first_name last_name 
                                        --- ---------- --------- 
                                        19  John       Smith     
-                                       18  Jane       Doe       \n''')
+                                       18  Jane       Doe       \n''')  # noqa
             actual = textwrap.dedent(actual.getvalue())
             self.assertEqual(expected.splitlines(), actual.splitlines())
